@@ -10,6 +10,7 @@ from kafka import KafkaProducer
 from kafka.errors import NoBrokersAvailable
 
 from config import Config
+from utils.common.affinity import affinity_key
 from utils.common.csv_format import encode_record, read_rows
 
 
@@ -44,6 +45,7 @@ class Client:
             while True:
                 for row in rows:
                     ts = datetime.now(timezone.utc).isoformat()
+                    key = affinity_key(row)
                     payload = encode_record(
                         row,
                         fieldnames,
@@ -52,10 +54,14 @@ class Client:
                             "ts": ts,
                         },
                     )
-                    self._producer.send(self.config.kafka_topic, value=payload)
+                    self._producer.send(
+                        self.config.kafka_topic,
+                        key=key,
+                        value=payload,
+                    )
                     sent += 1
                     print(
-                        f"streamed #{sent} {payload.splitlines()[-1]}",
+                        f"streamed #{sent} key={key} {payload.splitlines()[-1]}",
                         flush=True,
                     )
                     next_send += interval
@@ -75,6 +81,7 @@ class Client:
             try:
                 return KafkaProducer(
                     bootstrap_servers=bootstrap.split(","),
+                    key_serializer=lambda key: key.encode("utf-8"),
                     value_serializer=lambda value: value.encode("utf-8"),
                     linger_ms=0,
                     acks="all",

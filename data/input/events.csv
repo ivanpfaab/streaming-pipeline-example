@@ -1,4 +1,4 @@
-id,event,value
-10,purchase,42
-11,refund,15
-12,purchase,8
+id,event,value,is_conversion
+10,conversion,42,true
+11,page_view,15,false
+12,conversion,8,true

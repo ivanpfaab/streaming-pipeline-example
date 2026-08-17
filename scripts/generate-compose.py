@@ -134,7 +134,7 @@ def render_compose(
         "      - --topic",
         "      - events",
         "      - --partitions",
-        "      - \"1\"",
+        "      - \"2\"",
         "      - --replication-factor",
         "      - \"1\"",
         f"  {processor_service}:",

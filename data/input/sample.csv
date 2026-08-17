@@ -1,4 +1,4 @@
-id,event,value
-1,click,10
-2,view,3
-3,click,7
+id,event,value,is_conversion
+1,page_view,10,false
+2,page_view,3,false
+3,conversion,7,true

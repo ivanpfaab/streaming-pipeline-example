@@ -17,7 +17,7 @@ COPY utils ./utils
 COPY server/spark/src ./src
 
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/opt/spark/job
+ENV PYTHONPATH=/opt/spark/job:/opt/spark/job/src:/opt/spark/python
 ENV PYSPARK_PYTHON=python3
 
-CMD ["python3", "-u", "src/config.py"]
+CMD ["/opt/spark/bin/spark-submit", "--master", "local[*]", "src/config.py"]

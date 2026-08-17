@@ -1,47 +1,77 @@
-"""Streaming stub: Kafka CSV in, enriched CSV under data/output."""
+"""Count events by affinity key (conversion vs page_view) on one Kafka topic."""
+
 from datetime import datetime, timezone
 from pathlib import Path
 
 from pyflink.common import SimpleStringSchema, Types, WatermarkStrategy
 from pyflink.datastream import StreamExecutionEnvironment
+from pyflink.datastream.functions import MapFunction, RichMapFunction
+from pyflink.datastream.state import ValueStateDescriptor
 from pyflink.datastream.connectors.kafka import KafkaOffsetsInitializer, KafkaSource
-from pyflink.datastream.functions import MapFunction
 
 from config import Config
+from utils.common.affinity import affinity_key
 from utils.common.csv_format import append_csv_message, decode_record, encode_record
 
+COUNT_FIELDS = ["affinity_key", "event_count"]
 
-def enrich(raw: str) -> str:
-    fieldnames, row = decode_record(raw)
+
+def _count_record(key: str, count: int, processor: str) -> str:
     return encode_record(
-        row,
-        fieldnames,
+        {"affinity_key": key, "event_count": str(count)},
+        COUNT_FIELDS,
         extra={
-            "processed_at": datetime.now(timezone.utc).isoformat(),
-            "processor": "flink",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "processor": processor,
         },
     )
 
 
-class WriteCsv(MapFunction):
-    def __init__(self, output_dir: str) -> None:
-        self.output_dir = output_dir
-        self._file = None
-        self._header_written = False
+class RunningCount(RichMapFunction):
+    """Keyed running total. Swap this map for a windowed aggregate later."""
 
     def open(self, runtime_context) -> None:
-        path = Path(self.output_dir) / f"flink-{runtime_context.get_index_of_this_subtask()}.csv"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        self._file = path.open("a", encoding="utf-8", newline="")
-        self._header_written = path.stat().st_size > 0
+        self._count = runtime_context.get_state(
+            ValueStateDescriptor("event_count", Types.LONG())
+        )
+
+    def map(self, raw: str) -> str:
+        _, row = decode_record(raw)
+        key = affinity_key(row)
+        current = self._count.value()
+        current = 0 if current is None else current
+        current += 1
+        self._count.update(current)
+        return _count_record(key, current, "flink")
+
+
+class WriteCounts(MapFunction):
+    def __init__(self, output_dir: str) -> None:
+        self.output_dir = output_dir
+        self._files = None
+        self._headers = None
+
+    def open(self, _runtime_context) -> None:
+        Path(self.output_dir).mkdir(parents=True, exist_ok=True)
+        self._files = {}
+        self._headers = {}
 
     def map(self, value: str) -> str:
-        self._header_written = append_csv_message(self._file, value, self._header_written)
+        _, row = decode_record(value)
+        key = row.get("affinity_key", "unknown")
+        if key not in self._files:
+            path = Path(self.output_dir) / f"flink-{key}.csv"
+            already = path.exists() and path.stat().st_size > 0
+            self._files[key] = path.open("a", encoding="utf-8", newline="")
+            self._headers[key] = already
+        self._headers[key] = append_csv_message(
+            self._files[key], value, self._headers[key]
+        )
         return value
 
     def close(self) -> None:
-        if self._file is not None:
-            self._file.close()
+        for handle in (self._files or {}).values():
+            handle.close()
 
 
 class Pipeline:
@@ -68,13 +98,17 @@ class Pipeline:
         output_dir = str(self.config.output_dir)
         stream = (
             env.from_source(source, WatermarkStrategy.no_watermarks(), "kafka")
-            .map(enrich, output_type=Types.STRING())
-            .map(WriteCsv(output_dir), output_type=Types.STRING())
+            .key_by(
+                lambda raw: affinity_key(decode_record(raw)[1]),
+                key_type=Types.STRING(),
+            )
+            .map(RunningCount(), output_type=Types.STRING())
+            .map(WriteCounts(output_dir), output_type=Types.STRING())
         )
         stream.print()
 
         print(
-            f"Flink reading {self.config.kafka_topic} "
+            f"Flink counting {self.config.kafka_topic} by affinity "
             f"from {self.config.kafka_bootstrap} -> {output_dir}/flink-*.csv",
             flush=True,
         )

@@ -155,6 +155,10 @@ output "spark_image" {
   value = "${aws_ecr_repository.spark.repository_url}:${var.image_tag}"
 }
 
+output "processor_image" {
+  value = "${local.processor_repo}:${var.image_tag}"
+}
+
 output "kubeconfig_command" {
   value = "aws eks update-kubeconfig --region ${var.region} --name ${module.eks.cluster_name}"
 }

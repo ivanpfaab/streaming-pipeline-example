@@ -1,10 +1,18 @@
 # Streaming Pipeline Example
 
-CSV clients produce rows at a configurable rate. A server consumes the same Kafka topic with **Apache Flink** or **Apache Spark**. Kafka is ingest only.
+CSV clients produce rows at a configurable rate. A server consumes the same Kafka topic with **Apache Flink** or **Apache Spark**. Kafka is ingest only. Apply one processor, not both.
 
-```
-data/input CSVs → client-1..N → Kafka topic `events` (key = conversion|page_view)
-                              → PyFlink or PySpark → files under data/output
+```mermaid
+flowchart LR
+  csv["data/input CSVs"] --> clients["client-1 .. N"]
+  clients -->|"rows/sec"| kafka["Kafka topic events"]
+  kafka --> conv["key conversion"]
+  kafka --> page["key page_view"]
+  conv --> proc["PyFlink or PySpark"]
+  page --> proc
+  proc --> count["keyed running count"]
+  count --> outConv["*-conversion.csv"]
+  count --> outPage["*-page_view.csv"]
 ```
 
 The Kafka key comes from the CSV `is_conversion` column (`conversion` vs `page_view`). The topic has **2 partitions** so Flink `keyBy` / Spark `groupBy` stay aligned with the broker.

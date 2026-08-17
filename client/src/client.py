@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-import csv
-import json
 import sys
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 
 from kafka import KafkaProducer
 from kafka.errors import NoBrokersAvailable
 
 from config import Config
+from utils.common.csv_format import encode_record, read_rows
 
 
 class Client:
@@ -24,7 +22,12 @@ class Client:
         self.run()
 
     def run(self) -> None:
-        fieldnames, rows = self._load_rows(self.config.input_path)
+        try:
+            fieldnames, rows = read_rows(self.config.input_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(exc, file=sys.stderr)
+            sys.exit(1)
+
         self._producer = self._connect_producer(self.config.kafka_bootstrap)
         interval = 1.0 / self.config.rows_per_second
         next_send = time.monotonic()
@@ -40,12 +43,17 @@ class Client:
         try:
             while True:
                 for row in rows:
-                    payload = {
-                        "client_id": self.config.client_id,
-                        "ts": datetime.now(timezone.utc).isoformat(),
-                        "row": row,
-                    }
-                    self._producer.send(self.config.kafka_topic, value=payload)
+                    self._producer.send(
+                        self.config.kafka_topic,
+                        value=encode_record(
+                            row,
+                            fieldnames,
+                            extra={
+                                "client_id": self.config.client_id,
+                                "ts": datetime.now(timezone.utc).isoformat(),
+                            },
+                        ),
+                    )
                     sent += 1
                     next_send += interval
                     delay = next_send - time.monotonic()
@@ -58,30 +66,13 @@ class Client:
             self._producer.close()
             print(f"Sent {sent} records from columns {fieldnames}", flush=True)
 
-    def _load_rows(self, path: Path) -> tuple[list[str], list[dict[str, str]]]:
-        if not path.is_file():
-            print(f"Input CSV not found: {path}", file=sys.stderr)
-            sys.exit(1)
-
-        with path.open(newline="", encoding="utf-8") as handle:
-            reader = csv.DictReader(handle)
-            if reader.fieldnames is None:
-                print(f"Input CSV has no header: {path}", file=sys.stderr)
-                sys.exit(1)
-            rows = list(reader)
-
-        if not rows:
-            print(f"Input CSV has no data rows: {path}", file=sys.stderr)
-            sys.exit(1)
-        return reader.fieldnames, rows
-
     def _connect_producer(self, bootstrap: str) -> KafkaProducer:
         last_error: Exception | None = None
         for attempt in range(1, 31):
             try:
                 return KafkaProducer(
                     bootstrap_servers=bootstrap.split(","),
-                    value_serializer=lambda value: json.dumps(value).encode("utf-8"),
+                    value_serializer=lambda value: value.encode("utf-8"),
                     linger_ms=0,
                     acks="all",
                 )

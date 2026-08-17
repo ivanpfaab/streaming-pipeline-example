@@ -1,0 +1,9 @@
+region          = "us-east-1"
+cluster_name    = "streaming-example"
+pipeline        = "flink" # or "spark"
+image_tag       = "latest"
+rows_per_second = 5
+clients = [
+  { id = "client-1", csv = "sample.csv" },
+  { id = "client-2", csv = "events.csv" },
+]

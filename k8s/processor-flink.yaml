@@ -1,0 +1,48 @@
+# Apply this OR processor-spark.yaml, not both.
+# Replace IMAGE_PROCESSOR with your registry image, e.g. 123.dkr.ecr.us-east-1.amazonaws.com/streaming-flink:latest
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: processor
+  namespace: streaming
+  labels:
+    app: processor
+    pipeline: flink
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: processor
+  template:
+    metadata:
+      labels:
+        app: processor
+        pipeline: flink
+    spec:
+      initContainers:
+        - name: wait-kafka
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z kafka 9092; do sleep 2; done"]
+      containers:
+        - name: processor
+          image: IMAGE_PROCESSOR
+          imagePullPolicy: Always
+          env:
+            - name: KAFKA_BOOTSTRAP
+              value: kafka:9092
+            - name: KAFKA_TOPIC
+              value: events
+            - name: OUTPUT_DIR
+              value: /data/output
+          volumeMounts:
+            - name: output
+              mountPath: /data/output
+          resources:
+            requests:
+              cpu: "500m"
+              memory: 2Gi
+            limits:
+              memory: 4Gi
+      volumes:
+        - name: output
+          emptyDir: {}

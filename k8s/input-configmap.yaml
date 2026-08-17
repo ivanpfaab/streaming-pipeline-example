@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: input-csvs
+  namespace: streaming
+data:
+  sample.csv: |
+    id,event,value,is_conversion
+    1,page_view,10,false
+    2,page_view,3,false
+    3,conversion,7,true
+  events.csv: |
+    id,event,value,is_conversion
+    10,conversion,42,true
+    11,page_view,15,false
+    12,conversion,8,true

@@ -1,0 +1,91 @@
+# Replace IMAGE_CLIENT with your registry image.
+# Duplicate the Deployment for more clients and change CLIENT_ID / INPUT_PATH.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client-1
+  namespace: streaming
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: client
+      client-id: client-1
+  template:
+    metadata:
+      labels:
+        app: client
+        client-id: client-1
+    spec:
+      initContainers:
+        - name: wait-kafka
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z kafka 9092; do sleep 2; done"]
+      containers:
+        - name: client
+          image: IMAGE_CLIENT
+          imagePullPolicy: Always
+          env:
+            - name: INPUT_PATH
+              value: /data/input/sample.csv
+            - name: ROWS_PER_SECOND
+              value: "5"
+            - name: KAFKA_BOOTSTRAP
+              value: kafka:9092
+            - name: KAFKA_TOPIC
+              value: events
+            - name: CLIENT_ID
+              value: client-1
+          volumeMounts:
+            - name: input
+              mountPath: /data/input
+              readOnly: true
+      volumes:
+        - name: input
+          configMap:
+            name: input-csvs
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client-2
+  namespace: streaming
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: client
+      client-id: client-2
+  template:
+    metadata:
+      labels:
+        app: client
+        client-id: client-2
+    spec:
+      initContainers:
+        - name: wait-kafka
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z kafka 9092; do sleep 2; done"]
+      containers:
+        - name: client
+          image: IMAGE_CLIENT
+          imagePullPolicy: Always
+          env:
+            - name: INPUT_PATH
+              value: /data/input/events.csv
+            - name: ROWS_PER_SECOND
+              value: "5"
+            - name: KAFKA_BOOTSTRAP
+              value: kafka:9092
+            - name: KAFKA_TOPIC
+              value: events
+            - name: CLIENT_ID
+              value: client-2
+          volumeMounts:
+            - name: input
+              mountPath: /data/input
+              readOnly: true
+      volumes:
+        - name: input
+          configMap:
+            name: input-csvs

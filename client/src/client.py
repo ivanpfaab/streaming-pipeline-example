@@ -43,18 +43,21 @@ class Client:
         try:
             while True:
                 for row in rows:
-                    self._producer.send(
-                        self.config.kafka_topic,
-                        value=encode_record(
-                            row,
-                            fieldnames,
-                            extra={
-                                "client_id": self.config.client_id,
-                                "ts": datetime.now(timezone.utc).isoformat(),
-                            },
-                        ),
+                    ts = datetime.now(timezone.utc).isoformat()
+                    payload = encode_record(
+                        row,
+                        fieldnames,
+                        extra={
+                            "client_id": self.config.client_id,
+                            "ts": ts,
+                        },
                     )
+                    self._producer.send(self.config.kafka_topic, value=payload)
                     sent += 1
+                    print(
+                        f"streamed #{sent} {payload.splitlines()[-1]}",
+                        flush=True,
+                    )
                     next_send += interval
                     delay = next_send - time.monotonic()
                     if delay > 0:

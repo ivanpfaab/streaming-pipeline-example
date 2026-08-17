@@ -3,9 +3,14 @@ FROM flink:1.20.1-java17
 USER root
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 python3-pip \
+    && apt-get install -y --no-install-recommends \
+        python3 python3-pip python3-dev gcc \
+        openjdk-17-jdk-headless \
     && ln -sf /usr/bin/python3 /usr/bin/python \
+    && ln -sfn "$(dirname "$(dirname "$(readlink -f "$(which javac)")")")" /opt/java/jdk \
     && rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/opt/java/jdk
 
 WORKDIR /opt/flink/job
 

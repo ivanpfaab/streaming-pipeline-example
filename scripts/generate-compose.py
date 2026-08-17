@@ -165,10 +165,8 @@ def main() -> None:
         encoding="utf-8",
     )
     print(f"\nWrote {OUTPUT_FILE.name}")
-    print("\nTerminal 1:")
-    print("  docker compose --profile server -f docker-compose.generated.yml up --build")
-    print("\nTerminal 2:")
-    print("  docker compose --profile client -f docker-compose.generated.yml up --build")
+    print("\nTerminal 1:  make server")
+    print("Terminal 2:  make client")
 
 
 if __name__ == "__main__":
